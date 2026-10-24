@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Musée DB Prod 13 — visite 3D</title>
+<style>
+:root{color-scheme:dark;--gold:#d2a85c;--plaque:#efe8d8;--ink:#1c1a16;--bg:#14110d;--text:#f1ebdc;box-sizing:border-box}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Georgia,"Times New Roman",serif;overflow:hidden;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + .8rem) 1rem 0;pointer-events:none;display:flex;justify-content:space-between;gap:1rem}
+#room{font-size:1.4rem;text-shadow:0 1px 6px #000}
+#help{font:.85rem system-ui,sans-serif;opacity:.8;text-align:right;max-width:30ch;text-shadow:0 1px 4px #000}
+#pad{position:fixed;left:1rem;bottom:calc(env(safe-area-inset-bottom,0px) + 1rem);display:grid;grid-template-columns:repeat(3,3.2rem);grid-template-rows:repeat(2,3.2rem);gap:.4rem}
+#pad button{font:1.2rem system-ui;border:0;border-radius:6px;background:rgba(239,232,216,.85);color:var(--ink);touch-action:none}
+#pad button:focus-visible{outline:3px solid var(--gold)}
+#pad .u{grid-column:2}#pad .l{grid-row:2;grid-column:1}#pad .d{grid-row:2;grid-column:2}#pad .r{grid-row:2;grid-column:3}
+#ov{position:fixed;inset:0;background:rgba(10,9,7,.95);display:none;flex-direction:column;align-items:center;justify-content:center;padding:3vh 3vw;z-index:9}
+#ov.on{display:flex}
+#ov img{max-width:100%;max-height:78vh;object-fit:contain;border:10px solid var(--gold);background:var(--plaque)}
+#ov .c{background:var(--plaque);color:var(--ink);padding:.6rem 1.2rem;margin-top:1.5vh;text-align:center}
+#ov .c b{font-size:1.25rem;font-weight:400;display:block}
+#ov button{margin-top:1.5vh;font:1rem system-ui;border:0;background:var(--gold);color:var(--ink);padding:.6rem 1.2rem;border-radius:4px}
+#ov button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#start{position:fixed;inset:0;z-index:12;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem}
+#start h1{font-weight:400;font-size:clamp(2.6rem,9vw,5.5rem);line-height:.95;margin:0 0 1rem;color:#fff1c8}
+#start p{font:1rem/1.5 system-ui,sans-serif;max-width:40ch;opacity:.85;margin:0 0 1.5rem}
+#start button{font:500 1.05rem system-ui;border:0;background:var(--gold);color:var(--ink);padding:.8rem 1.6rem;border-radius:4px;cursor:pointer}
+#start button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+</style>
+</head>
+<body>
+<div id="start"><h1>Musée<br>DB Prod 13</h1><p>Une visite en 3D à travers sept salles. Flèches ou ZQSD pour marcher, glisser pour regarder, clic sur un tableau pour l’admirer.</p><button id="go">Entrer dans le musée</button></div>
+<canvas id="c"></canvas>
+<div id="hud"><div id="room">Entrée</div><div id="help">Flèches ou ZQSD : marcher<br>Glisser : regarder<br>Clic : voir un tableau</div></div>
+<div id="pad"><button class="u" data-k="f" aria-label="Avancer">▲</button><button class="l" data-k="l" aria-label="Tourner à gauche">◀</button><button class="d" data-k="b" aria-label="Reculer">▼</button><button class="r" data-k="r" aria-label="Tourner à droite">▶</button></div>
+<div id="ov" role="dialog" aria-modal="true"><img id="oi" alt=""><div class="c"><b id="ot"></b><span id="os"></span></div><button id="ox">Fermer</button></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const PHOTOS = [
+ {
+  "src": "photos/01-img-8487-1.jpg",
+  "title": "Chat dans les feuilles, vue naturelle",
+  "room": "Salle des Chats",
+  "first": true
+ },
+ {
+  "src": "photos/02-img-8487.jpg",
+  "title": "Chat dans les feuilles, version vive",
+  "room": "Salle des Chats"
+ },
+ {
+  "src": "photos/03-img-8488.jpg",
+  "title": "Chat au regard vert",
+  "room": "Salle des Chats"
+ },
+ {
+  "src": "photos/04-img-8506.jpg",
+  "title": "Palais Longchamp au crépuscule",
+  "room": "Salle du Palais",
+  "first": true
+ },
+ {
+  "src": "photos/05-img-8507.jpg",
+  "title": "Palais Longchamp, reflets verts",
+  "room": "Salle du Palais"
+ },
+ {
+  "src": "photos/06-img-8508.jpg",
+  "title": "Palais Longchamp, l’escalier",
+  "room": "Salle du Palais"
+ },
+ {
+  "src": "photos/07-img-8511.jpg",
+  "title": "Palais Longchamp, ciel chargé",
+  "room": "Salle du Palais"
+ },
+ {
+  "src": "photos/08-img-8562.jpg",
+  "title": "Le ferry Danielle Casanova",
+  "room": "Salle du Port et du Ciel",
+  "first": true
+ },
+ {
+  "src": "photos/09-img-8594-1.jpg",
+  "title": "Ciel de feu sur Marseille",
+  "room": "Salle du Port et du Ciel"
+ },
+ {
+  "src": "photos/10-img-9073.jpg",
+  "title": "Le pin dans la brume",
+  "room": "Salle du Port et du Ciel"
+ },
+ {
+  "src": "photos/11-dj-djel.jpg",
+  "title": "DJ Djel",
+  "room": "Salle des Platines",
+  "first": true
+ },
+ {
+  "src": "photos/12-djdjel-et-techos.jpg",
+  "title": "Djel et ses techos",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/13-djdjel.jpg",
+  "title": "Djel dans la fumée bleue",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/14-djdjel3.jpg",
+  "title": "Djel aux platines",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/15-djdjel4.jpg",
+  "title": "Djel sur Grenouille 88.8",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/16-djdjel5.jpg",
+  "title": "Djel, le vinyle jaune",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/17-djdjel5b-n.jpg",
+  "title": "Djel en noir et blanc",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/18-fonky-djel.jpg",
+  "title": "Fonky Djel",
+  "room": "Salle des Platines"
+ },
+ {
+  "src": "photos/19-felixgozzo.jpg",
+  "title": "Felix Gozzo, cracheur de feu",
+  "room": "Salle des Flammes",
+  "first": true
+ },
+ {
+  "src": "photos/20-gozzo-4.jpg",
+  "title": "Gozzo, le souffle de feu",
+  "room": "Salle des Flammes"
+ },
+ {
+  "src": "photos/21-gozzo.jpg",
+  "title": "Gozzo, flamme au grillage",
+  "room": "Salle des Flammes"
+ },
+ {
+  "src": "photos/22-gozzo5.jpg",
+  "title": "Gozzo, la grande flamme",
+  "room": "Salle des Flammes"
+ },
+ {
+  "src": "photos/23-florent-sallen.jpg",
+  "title": "Florent Sallen à la batterie",
+  "room": "Salle des Scènes",
+  "first": true
+ },
+ {
+  "src": "photos/24-beatbox-state-of-mind.jpg",
+  "title": "Beatbox State of Mind",
+  "room": "Salle des Scènes"
+ },
+ {
+  "src": "photos/25-geeker.jpg",
+  "title": "Geeker",
+  "room": "Salle des Scènes"
+ },
+ {
+  "src": "photos/26-dog-toursky.jpg",
+  "title": "Rendez-moi mon Toursky !!",
+  "room": "Salle des Rues",
+  "first": true
+ },
+ {
+  "src": "photos/27-impasse-leo-ferre.jpg",
+  "title": "Impasse Léo Ferré",
+  "room": "Salle des Rues"
+ }
+];
+const ROOMS = ["Salle des Chats","Salle du Palais","Salle du Port et du Ciel"];
+const GAP=5.5, W=9, START=-9;
+const L = START - GAP*PHOTOS.length - 6;
+const cv=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x14110d); scene.fog=new THREE.Fog(0x14110d,12,40);
+const cam=new THREE.PerspectiveCamera(70,1,.1,80); cam.rotation.order='YXZ'; cam.position.set(0,1.65,2);
+function resize(){renderer.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}
+addEventListener('resize',resize); resize();
+
+/* Salle */
+const len=-L+8, cz=(L+2)/2;
+function box(w,h,d,col,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:col}));m.position.set(x,y,z);scene.add(m);return m}
+const floorTex=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');g.fillStyle='#7a5a3a';g.fillRect(0,0,128,128);g.strokeStyle='#5b4129';g.lineWidth=3;for(let i=0;i<128;i+=32){g.beginPath();g.moveTo(0,i);g.lineTo(128,i);g.stroke();g.beginPath();g.moveTo(i%64?32:96,i);g.lineTo(i%64?32:96,i+32);g.stroke()}const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(W/3,len/3);return t})();
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(W,len),new THREE.MeshLambertMaterial({map:floorTex}));floor.rotation.x=-Math.PI/2;floor.position.set(0,0,cz);scene.add(floor);
+const ceil=new THREE.Mesh(new THREE.PlaneGeometry(W,len),new THREE.MeshLambertMaterial({color:0xe9e2d0}));ceil.rotation.x=Math.PI/2;ceil.position.set(0,4.2,cz);scene.add(ceil);
+box(.2,4.2,len,0x27382f,-W/2,2.1,cz); box(.2,4.2,len,0x27382f,W/2,2.1,cz);
+box(W,4.2,.2,0x1d2a23,0,2.1,L-1); box(W,4.2,.2,0x1d2a23,0,2.1,4);
+box(.25,.25,len,0xd2a85c,-W/2+.15,.12,cz); box(.25,.25,len,0xd2a85c,W/2-.15,.12,cz);
+scene.add(new THREE.HemisphereLight(0xfff1dc,0x3a2c1c,1.0));
+scene.add(new THREE.AmbientLight(0xffe9c4,.45));
+
+function textTex(txt,w,h,bg,fg,fs){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.fillStyle=bg;g.fillRect(0,0,w,h);g.fillStyle=fg;g.font=fs+'px Georgia, serif';g.textAlign='center';g.textBaseline='middle';
+  let t=txt; while(g.measureText(t).width>w-30&&t.length>3)t=t.slice(0,-2); if(t!==txt)t+='…'; g.fillText(t,w/2,h/2);return new THREE.CanvasTexture(c)}
+
+/* Tableaux */
+const pickables=[]; const sections=[]; const loader=new THREE.TextureLoader();
+PHOTOS.forEach((p,i)=>{
+  const side=i%2?1:-1, z=START-GAP*i-(i%2?GAP/2:0);
+  const x=side*(W/2-.15), rotY=-side*Math.PI/2;
+  const g=new THREE.Group(); g.position.set(x,2.05,z); g.rotation.y=rotY;
+  const im=new Image(); im.src=p.src;
+  const build=()=>{
+    const a=im.naturalWidth/im.naturalHeight; let h=2.3,w=h*a; if(w>3.6){w=3.6;h=w/a}
+    g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w+.35,h+.35,.08),new THREE.MeshLambertMaterial({color:0xd2a85c})),{}));
+    const mat=new THREE.MeshBasicMaterial({map:loader.load(p.src)});
+    const pic=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); pic.position.z=.05; pic.userData.i=i; g.add(pic); pickables.push(pic);
+    const pl=new THREE.Mesh(new THREE.PlaneGeometry(1.5,.28),new THREE.MeshBasicMaterial({map:textTex(p.title,600,112,'#efe8d8','#1c1a16',44)}));
+    pl.position.set(0,-h/2-.5,.05); g.add(pl);
+    
+  };
+  im.onload=build; if(im.complete&&im.naturalWidth)build();
+  scene.add(g);
+  if(p.first){sections.push({z:z+3,name:p.room});
+    const sg=new THREE.Mesh(new THREE.PlaneGeometry(5,.9),new THREE.MeshBasicMaterial({map:textTex(p.room,1000,180,'#1d2a23','#fff1c8',90)}));
+    sg.position.set(0,3.55,z+3.4); scene.add(sg);}
+});
+
+/* Contrôles */
+let yaw=0,pitch=0; const keys={f:0,b:0,l:0,r:0};
+const map={ArrowUp:'f',KeyW:'f',KeyZ:'f',ArrowDown:'b',KeyS:'b',ArrowLeft:'l',KeyA:'l',KeyQ:'l',ArrowRight:'r',KeyD:'r'};
+addEventListener('keydown',e=>{if(map[e.code]){keys[map[e.code]]=1;e.preventDefault()}if(e.key==='Escape')closeOv()});
+addEventListener('keyup',e=>{if(map[e.code])keys[map[e.code]]=0});
+document.querySelectorAll('#pad button').forEach(b=>{const k=b.dataset.k;
+  b.addEventListener('pointerdown',e=>{keys[k]=1;e.stopPropagation()});
+  ['pointerup','pointerleave','pointercancel'].forEach(t=>b.addEventListener(t,()=>keys[k]=0));});
+let drag=null,moved=0;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};moved=0});
+addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};moved+=Math.abs(dx)+Math.abs(dy);yaw-=dx*.005;pitch=Math.max(-.6,Math.min(.6,pitch-dy*.004))});
+addEventListener('pointerup',e=>{
+  if(drag&&moved<8&&e.target===cv){
+    const r=new THREE.Raycaster(); r.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1),cam);
+    const h=r.intersectObjects(pickables)[0]; if(h&&h.distance<9) openOv(h.object.userData.i);
+  } drag=null;});
+const ov=document.getElementById('ov');
+function openOv(i){const p=PHOTOS[i];document.getElementById('oi').src=p.src;document.getElementById('oi').alt=p.title;document.getElementById('ot').textContent=p.title;document.getElementById('os').textContent=p.room+' — œuvre '+(i+1)+' sur '+PHOTOS.length;ov.classList.add('on');document.getElementById('ox').focus()}
+function closeOv(){ov.classList.remove('on')}
+document.getElementById('ox').onclick=closeOv; ov.addEventListener('click',e=>{if(e.target===ov)closeOv()});
+document.getElementById('go').onclick=()=>{document.getElementById('start').style.display='none'};
+
+/* Boucle */
+const clock=new THREE.Clock(), roomEl=document.getElementById('room');
+function loop(){
+  const dt=Math.min(clock.getDelta(),.05);
+  yaw+=(keys.l-keys.r)*1.8*dt;
+  const v=(keys.f-keys.b)*3.2*dt;
+  cam.position.x=Math.max(-W/2+.8,Math.min(W/2-.8,cam.position.x-Math.sin(yaw)*v));
+  cam.position.z=Math.max(L+.5,Math.min(3,cam.position.z-Math.cos(yaw)*v));
+  cam.rotation.set(pitch,yaw,0);
+  let n='Entrée'; sections.forEach(s=>{if(cam.position.z<=s.z)n=s.name}); if(roomEl.textContent!==n)roomEl.textContent=n;
+  renderer.render(scene,cam); requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
