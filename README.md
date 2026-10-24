@@ -2,10 +2,7 @@
 
 Un musée virtuel en HTML / CSS / JavaScript (three.js) : on se promène à la première personne dans sept salles de photos.
 
-## Voir le musée
-- **GitHub Pages** : Settings → Pages → Branch `main` / dossier `/ (root)`. Le site sera disponible sur `https://drissou13.github.io/NOM-DU-DEPOT/`.
-- **En local** : ouvrir un terminal dans le dossier puis lancer `python3 -m http.server`, et aller sur http://localhost:8000
-  (ouvrir `index.html` directement par double-clic ne charge pas les photos à cause des règles du navigateur sur les textures WebGL).
+.
 
 ## Contrôles
 - Flèches ou ZQSD : marcher
